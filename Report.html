@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Premium Quiz Ultra</title>
+<style>
+:root{
+  --card:rgba(255,255,255,0.15);
+  --text:#fff;
+  --muted:#ddd;
+  --primary:#ff5722;
+  --correct:#4caf50;
+}
+body{
+  margin:0; padding:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  min-height:100vh;
+  display:flex; justify-content:center; align-items:center;
+  overflow-x:hidden;
+  background: linear-gradient(270deg, #1e3c72, #2a5298, #ff416c, #ffb347);
+  background-size: 800% 800%;
+  animation: gradientBG 20s ease infinite;
+  color: var(--text);
+}
+@keyframes gradientBG{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+.container{
+  width:95%; max-width:720px;
+  background: rgba(255,255,255,0.25); /* lighter inside box */
+  backdrop-filter: blur(18px);
+  border-radius: 24px;
+  padding:28px 24px 36px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  border: 2px solid rgba(255,255,255,0.15);
+  overflow:hidden;
+  position:relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.container:hover{
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.controls{
+  position:absolute; top:12px; right:12px; display:flex; gap:12px;
+  z-index:10;
+}
+.controls button{
+  padding:6px 10px; border:none; border-radius:6px; cursor:pointer; background:#3f51b5; color:#fff; font-weight:bold;
+}
+.topbar{
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;
+  font-size:13px; color:var(--muted);
+}
+.progress-bar-container{background:rgba(255,255,255,0.2); height:6px; border-radius:3px; overflow:hidden; margin-bottom:12px;}
+.progress-bar{height:6px; background:var(--primary); width:0%; transition:width 0.5s ease;}
+h1{font-size:22px; margin-bottom:12px;}
+.options{display:grid; gap:12px; margin-top:16px;}
+button.option{
+  padding:14px 18px;
+  border:none;
+  border-radius:16px;
+  background: rgba(255,255,255,0.35);
+  cursor:pointer;
+  transition: all 0.3s ease;
+  font-weight:500;
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.2);
+  color:#fff;
+}
+button.option:hover{
+  transform: scale(1.03);
+  background: rgba(255,255,255,0.45);
+}
+button.option.selected{
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
+  color:#fff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+button.option.correct{
+  background:#4caf50;
+  color:#fff;
+  box-shadow:0 4px 15px rgba(0,0,0,0.25);
+}
+button.primary{
+  margin-top:20px;padding:10px 16px;border:none;background:#3f51b5;color:#fff;border-radius:8px;cursor:pointer;transition:all 0.25s ease;
+}
+button.primary:hover{transform:scale(1.05);}
+.result-score{font-size:22px;font-weight:600;margin-top:16px;}
+.result-details{font-size:16px;margin-top:8px;color:#ddd;}
+.confetti{position:absolute;width:8px;height:8px;border-radius:50%;opacity:0.8;animation:fall 2s linear forwards;}
+@keyframes fall{0%{transform:translateY(0) rotate(0deg);}100%{transform:translateY(400px) rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="controls">
+    <button id="pauseBtn">⏸ Pause</button>
+    <button id="soundBtn">🔊 On</button>
+  </div>
+</div>
+<audio id="tickSound" src="https://www.soundjay.com/clock/sounds/clock-ticking-1.mp3" loop></audio>
+<script>
+const questions=[
+  {q:"Guess the capital of Maharashtra?", options:["Chennai","Kolkata","New Delhi","Mumbai"], answer:3},
+  {q:"New Delhi is the capital of the Union Territory of Delhi.", options:["True","False"], answer:0},
+  {q:"Patna is the capital city of which state?", options:["Bihar","Jharkhand","Chhattisgarh","Rajasthan"], answer:0},
+  {q:"The capital city of which state is known as the Pink City?", options:["Maharashtra","Rajasthan","Gujarat","Tamil Nadu"], answer:1},
+  {q:"Imphal is the largest city and capital of which state?", options:["Telangana","Mizoram","Manipur","None"], answer:2}
+];
+
+let index=0,score=0,selected=null,timer=30,interval=null;
+let paused=false, soundOn=true;
+const app=document.getElementById("app");
+const tick=document.getElementById("tickSound");
+const pauseBtn=document.getElementById("pauseBtn");
+const soundBtn=document.getElementById("soundBtn");
+
+pauseBtn.onclick = ()=>{
+  paused = !paused; 
+  if(paused){
+    clearInterval(interval); pauseBtn.textContent="▶️ Resume"; tick.pause();
+  } else {startTimer(); pauseBtn.textContent="⏸ Pause"; if(soundOn) tick.play();}
+}
+soundBtn.onclick = ()=>{
+  soundOn = !soundOn; 
+  if(soundOn && !paused){tick.play();} else{tick.pause();} 
+  soundBtn.textContent = soundOn?"🔊 On":"🔇 Off";
+}
+
+function instructions(){
+  app.innerHTML=`
+    <div>
+      <h1>Instructions</h1>
+      <ul style="margin:12px 0; color:#ddd; font-size:16px; line-height:1.6;">
+        <li>Total ${questions.length} questions.</li>
+        <li>Each question has 30 seconds.</li>
+        <li>Once selected, an answer cannot be changed.</li>
+        <li>Correct answers are highlighted green.</li>
+        <li>Enjoy the quiz!</li>
+      </ul>
+      <button class="primary" onclick="startQuiz()">Start Quiz</button>
+    </div>`;
+}
+
+function startQuiz(){index=0; score=0; loadQuestion();}
+
+function startTimer(){
+  timer=30;
+  document.getElementById("timer").textContent=timer+"s";
+  if(soundOn) tick.play();
+  interval=setInterval(()=>{
+    if(!paused){
+      timer--;
+      document.getElementById("timer").textContent=timer+"s";
+      if(timer<=0){clearInterval(interval); nextQuestion();}
+    }
+  },1000);
+}
+
+function loadQuestion(){
+  selected=null;
+  const q=questions[index];
+  app.innerHTML=`
+    <div class="topbar">
+      <div>Question ${index+1} / ${questions.length}</div>
+      <div class="timer" id="timer">${timer}s</div>
+    </div>
+    <div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div>
+    <h1>${q.q}</h1>
+    <div class="options">
+      ${q.options.map((o,i)=>`<button class="option" onclick="select(${i})">${o}</button>`).join('')}
+    </div>
+    <button class="primary" id="next" disabled onclick="nextQuestion()">Next</button>`;
+  document.getElementById("progress-bar").style.width=`${(index)/questions.length*100}%`;
+  startTimer();
+}
+
+function select(i){
+  if(selected!==null) return;
+  selected=i;
+  document.querySelectorAll(".option")[i].classList.add("selected");
+  document.getElementById("next").disabled=false;
+}
+
+function nextQuestion(){
+  clearInterval(interval);
+  const q=questions[index];
+  if(selected===q.answer) score++;
+  document.querySelectorAll(".option")[q.answer].classList.add("correct");
+  setTimeout(()=>{
+    index++;
+    if(index<questions.length) loadQuestion();
+    else showResult();
+  },500);
+}
+
+function showResult(){
+  tick.pause();
+  app.innerHTML=`
+    <div>
+      <h1 class="result-score" id="score">Score: 0 / ${questions.length}</h1>
+      <div class="result-details" id="details"></div>
+    </div>`;
+  let i=0;
+  const el=document.getElementById("score");
+  const intervalScore=setInterval(()=>{
+    if(i>score){clearInterval(intervalScore); showCompliment(); return;}
+    el.textContent=`Score: ${i} / ${questions.length}`;
+    i++;
+  },200);
+}
+
+function showCompliment(){
+  const details=document.getElementById("details");
+  const percent=Math.round((score/questions.length)*100);
+  let complement="";
+  if(percent>=90) complement="Outstanding! 🎉🌟👍";
+  else if(percent>=70) complement="Great job! 🎯👏";
+  else if(percent>=50) complement="Good effort! 🙂✨";
+  else complement="Keep trying! 💪😅";
+  details.innerHTML=`You answered ${score} out of ${questions.length} correctly.<br>${complement}`;
+  details.style.opacity=1;
+  confettiEffect();
+}
+
+function confettiEffect(){
+  let count = 50;
+  for(let i=0;i<count;i++){
+    setTimeout(()=>{
+      const c=document.createElement('div');
+      c.classList.add('confetti');
+      c.style.left=Math.random()*90+'%';
+      c.style.background=['#ff5722','#4caf50','#3f51b5','#ffeb3b'][Math.floor(Math.random()*4)];
+      c.style.width = c.style.height = 6 + Math.random()*6 + 'px';
+      document.body.appendChild(c);
+      setTimeout(()=>c.remove(),2000+Math.random()*2000);
+    }, i*50);
+  }
+}
+
+instructions();
+</script>
+</body>
+</html>
